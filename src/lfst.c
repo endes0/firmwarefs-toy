@@ -26,6 +26,8 @@
 #include "win32_compat.h"
 #endif
 #include <stdio.h>
+#include <stdlib.h>
+#include <malloc.h>
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
@@ -40,14 +42,16 @@
 #else
 #include "getopt/getopt.h"
 #endif
-#include <lfs.h>
+#include <fwfs.h>
 
 #include "lfs_driver.h"
 #include "lfs_extra.h"
 #include "littlefs-toy.h"
 
 #define COPY_BUF_SIZE (1024 * 1024)
-#define LFS_DEFAULT_BLOCKSIZE 4096
+
+//TODO: remove this and the commmand line option
+#define LFS_DEFAULT_BLOCKSIZE 131072
 
 
 int command = LFS_NONE;
@@ -59,7 +63,7 @@ int stdout_mode = 0;
 int stdin_mode = 0;
 char *image_file = NULL;
 char *directory = NULL;
-lfs_size_t block_size = LFS_DEFAULT_BLOCKSIZE;
+fwfs_size_t block_size = LFS_DEFAULT_BLOCKSIZE;
 uint32_t image_size = 0;
 uint32_t image_offset = 0;
 
@@ -96,7 +100,7 @@ int parse_params(int argc, char **argv, int start, param_t **list, bool filechec
 	int idx = start;
 	param_t *tail = NULL;
 	param_t *p;
-	char fullname[LFS_NAME_MAX * 2];
+	char fullname[FWFS_NAME_MAX * 2];
 
 	*list = NULL;
 
@@ -160,14 +164,14 @@ bool match_param(const char *name, param_t *list)
 }
 
 
-int extract_file(lfs_t *lfs, const char *pathname, bool overwrite)
+int extract_file(fwfs_t *lfs, const char *pathname, bool overwrite)
 {
-	lfs_file_t file;
+	fwfs_file_t file;
 	struct stat st;
 	void *buf = NULL;
 	int fd = -1;
 	int res = 0;
-	lfs_ssize_t len;
+	fwfs_ssize_t len;
 	char *dirname;
 
 
@@ -197,7 +201,7 @@ int extract_file(lfs_t *lfs, const char *pathname, bool overwrite)
 	}
 
 	/* Open file in lfs */
-	if ((res = lfs_file_open(lfs, &file, pathname, LFS_O_RDONLY)) != LFS_ERR_OK)
+	if ((res = fwfs_file_open(lfs, &file, pathname, FWFS_O_RDONLY)) != FWFS_ERR_OK)
 		res = -3;
 
 	/* Allocate buffer for copying the file */
@@ -208,13 +212,13 @@ int extract_file(lfs_t *lfs, const char *pathname, bool overwrite)
 
 	/* Copy file */
 	if (res == 0) {
-		while ((len = lfs_file_read(lfs, &file, buf, COPY_BUF_SIZE)) > 0) {
+		while ((len = fwfs_file_read(lfs, &file, buf, COPY_BUF_SIZE)) > 0) {
 			if (write_file(fd, -1, buf, len)) {
 				res = -5;
 				break;
 			}
 		}
-		lfs_file_close(lfs, &file);
+		fwfs_file_close(lfs, &file);
 	}
 
 	if (fd > STDERR_FILENO)
@@ -226,13 +230,13 @@ int extract_file(lfs_t *lfs, const char *pathname, bool overwrite)
 }
 
 
-int littlefs_list(lfs_t *lfs, const char *path, bool recursive, param_t *params,
+int littlefs_list(fwfs_t *lfs, const char *path, bool recursive, param_t *params,
 		bool match_all, bool extract_mode)
 {
-	lfs_dir_t dir;
-	struct lfs_info info;
+	fwfs_dir_t dir;
+	struct fwfs_info info;
 	char separator[2] = "/";
-	char fullname[LFS_NAME_MAX * 2];
+	char fullname[FWFS_NAME_MAX * 2];
 	size_t path_len;
 	int errors = 0;
 	int res;
@@ -241,7 +245,7 @@ int littlefs_list(lfs_t *lfs, const char *path, bool recursive, param_t *params,
 		return -1;
 
 	/* Check if path ends with "/" ... */
-	path_len = strnlen(path, LFS_NAME_MAX);
+	path_len = strnlen(path, FWFS_NAME_MAX);
 	if (path_len > 0) {
 		if (path[path_len - 1] == '/')
 			separator[0] = 0;
@@ -249,11 +253,11 @@ int littlefs_list(lfs_t *lfs, const char *path, bool recursive, param_t *params,
 
 
 	/* Open directory */
-	if ((res = lfs_dir_open(lfs, &dir, path)) != LFS_ERR_OK)
+	if ((res = fwfs_dir_open(lfs, &dir, path)) != FWFS_ERR_OK)
 		return -2;
 
 	/* Read directory entries... */
-	while ((res = lfs_dir_read(lfs, &dir, &info)) > 0) {
+	while ((res = fwfs_dir_read(lfs, &dir, &info)) > 0) {
 		bool skip = false;
 
 		/* Skip special directories ("." and "..") */
@@ -265,7 +269,7 @@ int littlefs_list(lfs_t *lfs, const char *path, bool recursive, param_t *params,
 		}
 
 		snprintf(fullname, sizeof(fullname), "%s%s%s", path, separator, info.name);
-		fullname[LFS_NAME_MAX] = 0;
+		fullname[FWFS_NAME_MAX] = 0;
 
 		if (params && !match_all) {
 			if (!match_param(fullname, params))
@@ -276,12 +280,12 @@ int littlefs_list(lfs_t *lfs, const char *path, bool recursive, param_t *params,
 			if (!extract_mode) {
 				if (verbose_mode)
 					printf("%crw-rw-rw- root/root %9u 0000-00-00 00:00 %s\n",
-						(info.type == LFS_TYPE_DIR ? 'd' : '-'),
+						(info.type == FWFS_TYPE_DIR ? 'd' : '-'),
 						info.size, fullname);
 				else
 					printf("%s\n", fullname);
 			}
-			else if (extract_mode && info.type == LFS_TYPE_REG) {
+			else if (extract_mode && info.type == FWFS_TYPE_REG) {
 				if ((res = extract_file(lfs, fullname, overwrite_mode))) {
 					if (res > 0) {
 						if ( res == 1)
@@ -299,13 +303,13 @@ int littlefs_list(lfs_t *lfs, const char *path, bool recursive, param_t *params,
 			}
 		}
 
-		if (info.type == LFS_TYPE_DIR && recursive) {
+		if (info.type == FWFS_TYPE_DIR && recursive) {
 			littlefs_list(lfs, fullname, recursive, params, !skip, extract_mode);
 		}
 	}
 
 	/* Close directory */
-	lfs_dir_close(lfs, &dir);
+	fwfs_dir_close(lfs, &dir);
 
 	return (errors ? 1 : 0);
 }
@@ -338,16 +342,16 @@ const char* strip_path_prefix(const char *pathname)
 }
 
 
-int copy_file_in(lfs_t *lfs, const char *pathname, bool overwrite)
+int copy_file_in(fwfs_t *lfs, const char *pathname, bool overwrite)
 {
-	lfs_file_t file;
-	struct lfs_info info;
+	fwfs_file_t file;
+	struct fwfs_info info;
 	int res = 0;
 	int fd;
 	const char *newpath;
 	char *dirname, *p;
 	void *buf;
-	ssize_t len;
+	fwfs_ssize_t len;
 
 
 	if (!lfs || !pathname)
@@ -356,7 +360,7 @@ int copy_file_in(lfs_t *lfs, const char *pathname, bool overwrite)
 	newpath = strip_path_prefix(pathname);
 
 	if (!overwrite) {
-		if (lfs_stat(lfs, newpath, &info) == LFS_ERR_OK) {
+		if (fwfs_stat(lfs, newpath, &info) == FWFS_ERR_OK) {
 			warn("%s: file already exists on the filesystem", newpath);
 			return -2;
 		}
@@ -381,11 +385,11 @@ int copy_file_in(lfs_t *lfs, const char *pathname, bool overwrite)
 	else
 		fd = open_file(pathname, true);
 	if (fd >= 0) {
-		res = lfs_file_open(lfs, &file, newpath, LFS_O_WRONLY | LFS_O_CREAT);
-		if (res == LFS_ERR_OK) {
+		res = fwfs_file_open(lfs, &file, newpath, FWFS_O_WRONLY | FWFS_O_CREAT);
+		if (res == FWFS_ERR_OK) {
 			if ((buf = calloc(1, COPY_BUF_SIZE))) {
 				while ((len = read(fd, buf, COPY_BUF_SIZE)) > 0) {
-					if (lfs_file_write(lfs, &file, buf, len) < len) {
+					if (fwfs_file_write(lfs, &file, buf, len) < len) {
 						res = -8;
 						break;
 					}
@@ -394,7 +398,7 @@ int copy_file_in(lfs_t *lfs, const char *pathname, bool overwrite)
 			} else {
 				res = -7;
 			}
-			lfs_file_close(lfs, &file);
+			fwfs_file_close(lfs, &file);
 		} else {
 			res =-6;
 		}
@@ -409,7 +413,7 @@ int copy_file_in(lfs_t *lfs, const char *pathname, bool overwrite)
 }
 
 
-int copy_dir_in(lfs_t *lfs, const char *dirname, bool overwrite)
+int copy_dir_in(fwfs_t *lfs, const char *dirname, bool overwrite)
 {
 	DIR *dir;
 	struct dirent *e;
@@ -471,7 +475,7 @@ int copy_dir_in(lfs_t *lfs, const char *dirname, bool overwrite)
 }
 
 
-int littlefs_add(lfs_t *lfs, param_t *params, bool overwrite)
+int littlefs_add(fwfs_t *lfs, param_t *params, bool overwrite)
 {
 	struct stat st;
 	int res = 0;
@@ -516,17 +520,17 @@ int littlefs_add(lfs_t *lfs, param_t *params, bool overwrite)
 }
 
 
-int littlefs_del(lfs_t *lfs, param_t *params)
+int littlefs_del(fwfs_t *lfs, param_t *params)
 {
-	struct lfs_info st;
+	struct fwfs_info st;
 	int res = 0;
 
 	if (params) {
 		param_t *p = params;
 		while (p) {
-			if (lfs_stat(lfs,p->name, &st) == LFS_ERR_OK) {
+			if (fwfs_stat(lfs,p->name, &st) == FWFS_ERR_OK) {
 				p->found = true;
-				if (st.type == LFS_TYPE_DIR) {
+				if (st.type == FWFS_TYPE_DIR) {
 					if ((res = lfs_rmdir_recursive(lfs, p->name))) {
 						warn("%s: failed to remove directory (%d)", p->name, res);
 						res = 1;
@@ -534,7 +538,7 @@ int littlefs_del(lfs_t *lfs, param_t *params)
 					}
 				}
 				else {
-					if ((res = lfs_remove(lfs, p->name)) != LFS_ERR_OK) {
+					if ((res = fwfs_remove(lfs, p->name)) != FWFS_ERR_OK) {
 						warn("%s: failed to remove file (%d)", p->name, res);
 						res = 1;
 						break;
@@ -565,9 +569,9 @@ int littlefs_del(lfs_t *lfs, param_t *params)
 }
 
 
-int littlefs_mount(struct lfs_context *ctx, lfs_t *lfs)
+int littlefs_mount(struct lfs_context *ctx, fwfs_t *lfs)
 {
-	lfs_size_t new_block_size = 0;
+	fwfs_size_t new_block_size = 0;
 	int res = 0;
 	char *msg;
 
@@ -577,9 +581,9 @@ int littlefs_mount(struct lfs_context *ctx, lfs_t *lfs)
 
 	warn_clear_last_msg();
 	warn_mode(false);
-	res = lfs_mount(lfs, &ctx->cfg);
+	res = fwfs_mount(lfs, &ctx->cfg);
 	warn_mode(true);
-	if (res == LFS_ERR_OK)
+	if (res == FWFS_ERR_OK)
 		return 0;
 
 	/* I mount failed, check if blocksize was incorrect */
@@ -600,7 +604,7 @@ int littlefs_mount(struct lfs_context *ctx, lfs_t *lfs)
 			new_block_size, block_size);
 		block_size = new_block_size;
 		lfs_change_blocksize(ctx, image_size, block_size);
-		res = lfs_mount(lfs, &ctx->cfg);
+		res = fwfs_mount(lfs, &ctx->cfg);
 	}
 	else {
 		if (msg && strlen(msg) > 0)
@@ -627,7 +631,7 @@ void print_version()
 		"and you are welcome to redistribute it under certain conditions.\n"
 		"See the GNU General Public License for more details.\n\n");
 
-	printf("\nlittlefs version: %d.%d\n", LFS_VERSION_MAJOR, LFS_VERSION_MINOR);
+	printf("\nlittlefs version: %d.%d\n", FWFS_VERSION_MAJOR, FWFS_VERSION_MINOR);
 #ifdef LFS_COPYRIGHT
 	printf("%s\n", LFS_COPYRIGHT);
 #endif
@@ -779,7 +783,7 @@ int main(int argc, char **argv)
 	struct lfs_context *ctx;
 	param_t *params = NULL;
 	void *image_buf = NULL;
-	lfs_t lfs;
+	fwfs_t lfs;
 	int fd = -1;
 	int ret = 0;
 	int res;
@@ -837,14 +841,14 @@ int main(int argc, char **argv)
 			if ((res = read_file(fd, image_offset, image_buf, bufsize)))
 				fatal("%s: failed to read image from file (%d)", image_file, errno);
 		}
-		ctx = lfs_init_mem(image_buf, image_size, block_size);
+		ctx = lfs_init_mem(image_buf, bufsize, block_size);
 	}
 	if (!ctx)
 		fatal("failed to initialize LittleFS");
 
 	if (command == LFS_CREATE) {
 		/* Make new filesystem */
-		if ((res = lfs_format(&lfs, &ctx->cfg)) != LFS_ERR_OK)
+		if ((res = fwfs_format(&lfs, &ctx->cfg)) != FWFS_ERR_OK)
 			fatal("%s: failed to create a new LittleFS filesystem: %d", image_file, res);
 	}
 
@@ -853,24 +857,24 @@ int main(int argc, char **argv)
 		fatal("%s: failed to mount LittleFS (%d)", image_file, res);
 
 	if (image_size == 0) {
-		ctx->cfg.block_count = lfs.block_count;
-		image_size = block_size * lfs.block_count;
+		ctx->cfg.block_count = lfs.cfg->block_count;
+		image_size = block_size * lfs.cfg->block_count;
 	} else {
-		uint32_t new_size = block_size * lfs.block_count;
+		uint32_t new_size = block_size * lfs.cfg->block_count;
 		if (image_size != new_size)
 			warn("specified image size does not match filesystem: %u vs %u",
 				image_size, new_size);
 	}
 
 	if (verbose_mode > 1 && !stdout_mode) {
-		lfs_size_t used_blocks = lfs_fs_size(&lfs);
+		fwfs_size_t used_blocks = fwfs_fs_size(&lfs);
 
-		printf("Filesystem size: %10u bytes (%u blocks)\n", block_size * lfs.block_count,
-			lfs.block_count);
+		printf("Filesystem size: %10u bytes (%u blocks)\n", block_size * lfs.cfg->block_count,
+			lfs.cfg->block_count);
 		printf("           used: %10u bytes (%u blocks)\n", block_size * used_blocks,
 			used_blocks);
 		printf("           free: %10u bytes (%u blocks)\n\n",
-			block_size * (lfs.block_count - used_blocks), lfs.block_count - used_blocks);
+			block_size * (lfs.cfg->block_count - used_blocks), lfs.cfg->block_count - used_blocks);
 		printf("      blocksize: %10u bytes\n\n", block_size);
 	}
 
@@ -922,7 +926,7 @@ int main(int argc, char **argv)
 
 
 	/* Unmount LittleFS */
-	if ((res = lfs_unmount(&lfs)) != LFS_ERR_OK)
+	if ((res = fwfs_unmount(&lfs)) != FWFS_ERR_OK)
 		fatal("%s: failed to unmount LittleFS (%d)", image_file, res);
 
 	if (command != LFS_LIST) {

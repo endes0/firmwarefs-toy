@@ -25,7 +25,7 @@
 #ifdef LFS_THREADSAFE
 #include <pthread.h>
 #endif
-#include <lfs.h>
+#include <fwfs.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -34,7 +34,7 @@ extern "C"
 
 
 struct lfs_context {
-	struct lfs_config cfg;
+	struct fwfs_config cfg;
 	int fd;
 	void *base;
 	size_t offset;

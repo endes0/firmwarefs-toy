@@ -22,7 +22,7 @@
 #ifndef _LFS_EXTRA_H_
 #define _LFS_EXTRA_H_
 
-#include <lfs.h>
+#include <fwfs.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -30,8 +30,8 @@ extern "C"
 #endif
 
 
-int lfs_mkdir_parent(lfs_t *lfs, const char *pathname);
-int lfs_rmdir_recursive(lfs_t *lfs, const char *pathname);
+int lfs_mkdir_parent(fwfs_t *lfs, const char *pathname);
+int lfs_rmdir_recursive(fwfs_t *lfs, const char *pathname);
 
 
 

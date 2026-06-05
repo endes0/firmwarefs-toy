@@ -37,18 +37,19 @@ check_function_exists(getopt_long HAVE_GETOPT_LONG)
 find_package(Python3 COMPONENTS Interpreter Development)
 
 
-# LittleFS
+# FirmwareFS
 
-add_library(littlefs INTERFACE)
-target_include_directories(littlefs INTERFACE
-  libs/littlefs/
+add_library(fwfs INTERFACE)
+target_include_directories(fwfs INTERFACE
+  libs/fwfs/
 )
-target_sources(littlefs INTERFACE
-  libs/littlefs/lfs.c
-  libs/littlefs/lfs_util.c
+target_sources(fwfs INTERFACE
+  libs/fwfs/fwfs.c
+  libs/fwfs/fwfs_util.c
+  libs/fwfs/fwfs_tftl.c
 )
 set_source_files_properties(
-  libs/littlefs/lfs.c
+  libs/fwfs/fwfs.c
   PROPERTIES
   COMPILE_OPTIONS "-Wno-unused-function"
 )
@@ -76,9 +77,9 @@ endif()
 
 if (MINGW)
    message("Building with mingw-w64")
-   target_link_libraries(lfst -static gcc winpthread littlefs -dynamic)
+   target_link_libraries(lfst -static gcc winpthread fwfs -dynamic)
 else()
-   target_link_libraries(lfst PRIVATE littlefs)
+   target_link_libraries(lfst PRIVATE fwfs)
 endif()
 
 
@@ -96,11 +97,9 @@ endif()
 
 target_compile_definitions(lfst PRIVATE
   HAVE_CONFIG_H
-  LFS_DEFINES=lfs_opts.h
-  LFS_THREADSAFE
-  LFS_NO_DEBUG
-  LFS_NO_WARN
-#  LFS_NO_ERROR
+  FWFS_DEFINES=lfs_opts.h
+  FWFS_YES_TRACE
+#  FWFS_NO_ERROR
 )
 
 

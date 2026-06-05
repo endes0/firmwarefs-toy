@@ -24,40 +24,40 @@
 #endif
 #include <stdio.h>
 #include <string.h>
-#include <lfs.h>
-#include <lfs_util.h>
+#include <fwfs.h>
+#include <fwfs_util.h>
 
 #include "lfs_extra.h"
 
 
-int lfs_mkdir_parent(lfs_t *lfs, const char *pathname)
+int lfs_mkdir_parent(fwfs_t *lfs, const char *pathname)
 {
-	struct lfs_info info;
+	struct fwfs_info info;
 	char *path, *tok, *saveptr;
-	int res = LFS_ERR_OK;
+	int res = FWFS_ERR_OK;
 
 
 	if (!lfs || !pathname)
-		return LFS_ERR_INVAL;
+		return FWFS_ERR_INVAL;
 
 	/* Check if directory already exists */
-	if (lfs_stat(lfs, pathname, &info) == LFS_ERR_OK)
-		return LFS_ERR_OK;
+	if (fwfs_stat(lfs, pathname, &info) == FWFS_ERR_OK)
+		return FWFS_ERR_OK;
 
 	if (!(path = strdup(pathname)))
-		return LFS_ERR_NOMEM;
+		return FWFS_ERR_NOMEM;
 
 	if ((tok = strtok_r(path, "/", &saveptr))) {
 		while (tok) {
-			res = lfs_mkdir(lfs, path);
-			if (res != LFS_ERR_EXIST && res != LFS_ERR_OK)
+			res = fwfs_mkdir(lfs, path);
+			if (res != FWFS_ERR_EXIST && res != FWFS_ERR_OK)
 				break;
 			if (saveptr)
 				*(saveptr - 1) = '/';
 			tok = strtok_r(NULL, "/", &saveptr);
 		}
 	} else {
-		res = LFS_ERR_NOENT;
+		res = FWFS_ERR_NOENT;
 	}
 
 	free(path);
@@ -66,32 +66,32 @@ int lfs_mkdir_parent(lfs_t *lfs, const char *pathname)
 }
 
 
-int lfs_rmdir_recursive(lfs_t *lfs, const char *pathname)
+int lfs_rmdir_recursive(fwfs_t *lfs, const char *pathname)
 {
-	struct lfs_info st;
-	lfs_dir_t dir;
+	struct fwfs_info st;
+	fwfs_dir_t dir;
 	char separator[2] = "/";
-	char fullname[LFS_NAME_MAX * 2];
+	char fullname[FWFS_NAME_MAX * 2];
 	size_t path_len;
-	int res = LFS_ERR_OK;
+	int res = FWFS_ERR_OK;
 
 
-	if (lfs_stat(lfs, pathname, &st) != LFS_ERR_OK)
-		return LFS_ERR_NOENT;
-	if (st.type != LFS_TYPE_DIR)
-		return LFS_ERR_NOTDIR;
+	if (fwfs_stat(lfs, pathname, &st) != FWFS_ERR_OK)
+		return FWFS_ERR_NOENT;
+	if (st.type != FWFS_TYPE_DIR)
+		return FWFS_ERR_NOTDIR;
 
 	/* Check if path ends with "/" ... */
-	path_len = strnlen(pathname, LFS_NAME_MAX);
+	path_len = strnlen(pathname, FWFS_NAME_MAX);
 	if (path_len > 0) {
 		if (pathname[path_len - 1] == '/')
 			separator[0] = 0;
 	}
 
 	/* Read and delete entries in the directory */
-	if ((res = lfs_dir_open(lfs, &dir, pathname)) != LFS_ERR_OK)
+	if ((res = fwfs_dir_open(lfs, &dir, pathname)) != FWFS_ERR_OK)
 		return res;
-	while (lfs_dir_read(lfs, &dir, &st) > 0) {
+	while (fwfs_dir_read(lfs, &dir, &st) > 0) {
 		/* Skip special directories ("." and "..") */
 		if (st.name[0] == '.') {
 			if (st.name[1] == 0)
@@ -101,20 +101,20 @@ int lfs_rmdir_recursive(lfs_t *lfs, const char *pathname)
 		}
 
 		snprintf(fullname, sizeof(fullname), "%s%s%s", pathname, separator, st.name);
-		fullname[LFS_NAME_MAX] = 0;
+		fullname[FWFS_NAME_MAX] = 0;
 
-		if (st.type == LFS_TYPE_DIR) {
-			if ((res = lfs_rmdir_recursive(lfs, fullname)) != LFS_ERR_OK)
+		if (st.type == FWFS_TYPE_DIR) {
+			if ((res = lfs_rmdir_recursive(lfs, fullname)) != FWFS_ERR_OK)
 				break;
 		} else {
-			if ((res = lfs_remove(lfs, fullname)) != LFS_ERR_OK)
+			if ((res = fwfs_remove(lfs, fullname)) != FWFS_ERR_OK)
 				break;
 		}
 	}
-	lfs_dir_close(lfs, &dir);
+	fwfs_dir_close(lfs, &dir);
 
-	if (res == LFS_ERR_OK) {
-		res = lfs_remove(lfs, pathname);
+	if (res == FWFS_ERR_OK) {
+		res = fwfs_remove(lfs, pathname);
 	}
 
 	return res;

@@ -35,8 +35,8 @@
 #endif
 #include <sys/stat.h>
 #include <pthread.h>
-#include <lfs.h>
-#include <lfs_util.h>
+#include <fwfs.h>
+#include <fwfs_util.h>
 
 #include "lfs_driver.h"
 
@@ -75,86 +75,86 @@ static ssize_t write_fd(int fd, const void *buf, size_t count)
 }
 
 
-static int block_device_read(const struct lfs_config *c, lfs_block_t block,
-		lfs_off_t off, void *buffer, lfs_size_t size)
+static int block_device_read(const struct fwfs_config *c, fwfs_block_t block,
+		fwfs_off_t off, void *buffer, fwfs_size_t size)
 {
 	struct lfs_context *ctx = (struct lfs_context*)c->context;
 
 
 	if (c->block_count > 0 && block >= c->block_count) {
-		LFS_ERROR("attempt to read past end of filesystem");
-		return LFS_ERR_IO;
+		FWFS_ERROR("attempt to read past end of filesystem");
+		return FWFS_ERR_IO;
 	}
 	if (off + size > c->block_size) {
-		LFS_ERROR("attempt to read past end of block");
-		return LFS_ERR_IO;
+		FWFS_ERROR("attempt to read past end of block");
+		return FWFS_ERR_IO;
 	}
 
 	if (ctx->fd >= 0) {
 		off_t f_offset = ctx->offset + (block * c->block_size) + off;
 		if (lseek(ctx->fd, f_offset, SEEK_SET) < 0) {
-			LFS_ERROR("seek failed: %ld (errno=%d)", f_offset, errno);
-			return LFS_ERR_IO;
+			FWFS_ERROR("seek failed: %ld (errno=%d)", f_offset, errno);
+			return FWFS_ERR_IO;
 		}
 		if (read_fd(ctx->fd, buffer, size) < size) {
-			LFS_ERROR("failed to read file");
-			return LFS_ERR_IO;
+			FWFS_ERROR("failed to read file");
+			return FWFS_ERR_IO;
 		}
 	} else {
 		memcpy(buffer, ctx->base + (block * c->block_size) + off, size);
 	}
-	return LFS_ERR_OK;
+	return FWFS_ERR_OK;
 }
 
-static int block_device_prog(const struct lfs_config *c, lfs_block_t block,
-		lfs_off_t off, const void *buffer, lfs_size_t size)
+static int block_device_prog(const struct fwfs_config *c, fwfs_block_t block,
+		fwfs_off_t off, const void *buffer, fwfs_size_t size)
 {
 	struct lfs_context *ctx = (struct lfs_context*)c->context;
 
 	if (block >= c->block_count) {
-		LFS_ERROR("attempt to write past end of filesystem");
-		return LFS_ERR_IO;
+		FWFS_ERROR("attempt to write past end of filesystem");
+		return FWFS_ERR_IO;
 	}
 	if (off % c->prog_size != 0) {
-		LFS_ERROR("flash address must be aligned to flash page");
-		return LFS_ERR_IO;
+		FWFS_ERROR("flash address must be aligned to flash page");
+		return FWFS_ERR_IO;
 	}
 	if (size % c->prog_size != 0) {
-		LFS_ERROR("bytes to write must be multiple of flash page size");
-		return LFS_ERR_IO;
+		FWFS_ERROR("bytes to write must be multiple of flash page size");
+		return FWFS_ERR_IO;
 	}
 	if (off + size > c->block_size) {
-		LFS_ERROR("write must be within a block");
-		return LFS_ERR_IO;
+		FWFS_ERROR("write must be within a block");
+		return FWFS_ERR_IO;
 	}
 
 	if (ctx->fd >= 0) {
 		off_t f_offset = ctx->offset + (block * c->block_size) + off;
 		if (lseek(ctx->fd, f_offset, SEEK_SET) < 0) {
-			LFS_ERROR("seek failed: %ld", f_offset);
-			return LFS_ERR_IO;
+			FWFS_ERROR("seek failed: %ld", f_offset);
+			return FWFS_ERR_IO;
 		}
 		if (write_fd(ctx->fd, buffer, size) < size) {
-			LFS_ERROR("failed to read file");
-			return LFS_ERR_IO;
+			FWFS_ERROR("failed to read file");
+			return FWFS_ERR_IO;
 		}
 	} else {
 		memcpy(ctx->base + (block * c->block_size) + off, buffer, size);
 	}
 
-	return LFS_ERR_OK;
+	return FWFS_ERR_OK;
 }
 
-static int block_device_erase(const struct lfs_config *c, lfs_block_t block)
+static int block_device_erase(const struct fwfs_config *c, fwfs_block_t block)
 {
 	struct lfs_context *ctx = (struct lfs_context*)c->context;
 	static void *null_buf = NULL;
-	static lfs_size_t null_buf_size = 0;
+	static fwfs_size_t null_buf_size = 0;
 
 
 	if (block >= c->block_count) {
-		LFS_ERROR("attempt to erase past end of filesystem");
-		return LFS_ERR_IO;
+		FWFS_ERROR("attempt to erase past end of filesystem");
+		return FWFS_ERR_IO;
 	}
 
 	if (ctx->fd >= 0) {
@@ -162,65 +162,65 @@ static int block_device_erase(const struct lfs_config *c, lfs_block_t block)
 			if (null_buf)
 				free(null_buf);
 			if (!(null_buf = calloc(1, c->block_size)))
-				return LFS_ERR_NOMEM;
+				return FWFS_ERR_NOMEM;
 			null_buf_size = c->block_size;
 		}
 		off_t f_offset = ctx->offset + (block * c->block_size);
 		if (lseek(ctx->fd, f_offset, SEEK_SET) < 0) {
-			LFS_ERROR("seek failed: %ld", f_offset);
-			return LFS_ERR_IO;
+			FWFS_ERROR("seek failed: %ld", f_offset);
+			return FWFS_ERR_IO;
 		}
 		if (write_fd(ctx->fd, null_buf, null_buf_size) < null_buf_size) {
-			LFS_ERROR("failed to write file");
-			return LFS_ERR_IO;
+			FWFS_ERROR("failed to write file");
+			return FWFS_ERR_IO;
 		}
 	}
 	else {
 		memset(ctx->base + (block * c->block_size), 0, c->block_size);
 	}
 
-	return LFS_ERR_OK;
+	return FWFS_ERR_OK;
 }
 
-static int block_device_sync(const struct lfs_config *c)
+static int block_device_sync(const struct fwfs_config *c)
 {
 	struct lfs_context *ctx = (struct lfs_context*)c->context;
 
 	if (ctx->fd >= 0) {
 		if (fsync(ctx->fd)) {
-			LFS_ERROR("fsync() failed: %d", errno);
-			return LFS_ERR_IO;
+			FWFS_ERROR("fsync() failed: %d", errno);
+			return FWFS_ERR_IO;
 		}
 	}
 
-	return LFS_ERR_OK;
+	return FWFS_ERR_OK;
 }
 
 #ifdef LFS_THREADSAFE
-static int block_device_lock(const struct lfs_config *c)
+static int block_device_lock(const struct fwfs_config *c)
 {
 	struct lfs_context *ctx = (struct lfs_context*)c->context;
 
 	pthread_mutex_lock(&ctx->mutex);
 
-	return LFS_ERR_OK;
+	return FWFS_ERR_OK;
 }
 
 
-static int block_device_unlock(const struct lfs_config *c)
+static int block_device_unlock(const struct fwfs_config *c)
 {
 	struct lfs_context *ctx = (struct lfs_context*)c->context;
 
 	pthread_mutex_unlock(&ctx->mutex);
 
-	return LFS_ERR_OK;
+	return FWFS_ERR_OK;
 }
 #endif
 
 
-static void init_lfs_config(struct lfs_config *cfg, size_t blocksize, size_t blocks, void *ctx)
+static void init_fwfs_config(struct fwfs_config *cfg, size_t blocksize, size_t blocks, void *ctx)
 {
-	memset(cfg, 0, sizeof(struct lfs_config));
+	memset(cfg, 0, sizeof(struct fwfs_config));
 
 	cfg->context = ctx;
 
@@ -234,13 +234,18 @@ static void init_lfs_config(struct lfs_config *cfg, size_t blocksize, size_t blo
 	cfg->unlock = block_device_unlock;
 #endif
 	/* LFS settings */
-	cfg->read_size = 1;
-	cfg->prog_size = blocksize;
-	cfg->block_size = blocksize;
+
+	//TODO: this is confgured for only the option CONFIG_MS_SPINAND on, there should be also for when is off
+	cfg->read_size = 2048;
+	cfg->prog_size = 2048;
+	cfg->block_size = 131072;
 	cfg->block_count = blocks;
+	cfg->subblock_size = 32768;
+	cfg->file_cache_size = 2048;
 
 	cfg->block_cycles = -1;
-	cfg->cache_size = blocksize;
+	cfg->cache_size = 2048;
+	cfg->cache_pool_size = 8;
 	cfg->lookahead_size = 32;
 
 }
@@ -252,13 +257,13 @@ struct lfs_context* lfs_init_mem(void *base, size_t size, size_t blocksize)
 		return NULL;
 
 	if (size % blocksize != 0) {
-		LFS_ERROR("image size not multiple of blocksize");
+		FWFS_ERROR("image size not multiple of blocksize");
 		return NULL;
 	}
 
 	struct lfs_context *ctx = calloc(1, sizeof(struct lfs_context));
 	if (!ctx) {
-		LFS_ERROR("out of memory");
+		FWFS_ERROR("out of memory");
 		return NULL;
 	}
 
@@ -269,7 +274,7 @@ struct lfs_context* lfs_init_mem(void *base, size_t size, size_t blocksize)
 	pthread_mutex_init(&ctx->mutex, NULL);
 #endif
 
-	init_lfs_config(&ctx->cfg, blocksize, size / blocksize, ctx);
+	init_fwfs_config(&ctx->cfg, blocksize, size / blocksize, ctx);
 
 	return ctx;
 }
@@ -278,28 +283,28 @@ struct lfs_context* lfs_init_mem(void *base, size_t size, size_t blocksize)
 struct lfs_context* lfs_init_file(int fd, size_t offset, size_t size, size_t blocksize)
 {
 	if (fd < 0 || blocksize < 1) {
-		LFS_ERROR("invalid arguments");
+		FWFS_ERROR("invalid arguments");
 		return NULL;
 	}
 
 	if (size % blocksize != 0) {
-		LFS_ERROR("image size not multiple of blocksize");
+		FWFS_ERROR("image size not multiple of blocksize");
 		return NULL;
 	}
 
 	struct stat st;
 	if (fstat(fd, &st) != 0) {
-		LFS_ERROR("failed to stat file");
+		FWFS_ERROR("failed to stat file");
 		return NULL;
 	}
 	if ((off_t)(offset + size) > st.st_size) {
-		LFS_ERROR("file too small");
+		FWFS_ERROR("file too small");
 		return NULL;
 	}
 
 	struct lfs_context *ctx = calloc(1, sizeof(struct lfs_context));
 	if (!ctx) {
-		LFS_ERROR("out of memory");
+		FWFS_ERROR("out of memory");
 		return NULL;
 	}
 
@@ -307,7 +312,7 @@ struct lfs_context* lfs_init_file(int fd, size_t offset, size_t size, size_t blo
 	ctx->base = NULL;
 	ctx->offset = offset;
 
-	init_lfs_config(&ctx->cfg, blocksize, size / blocksize, ctx);
+	init_fwfs_config(&ctx->cfg, blocksize, size / blocksize, ctx);
 
 	return ctx;
 }
@@ -318,13 +323,14 @@ int lfs_change_blocksize(struct lfs_context *ctx, size_t size, size_t blocksize)
 		return -1;
 
 	if (size % blocksize != 0) {
-		LFS_ERROR("image size not multiple of blocksize");
+		FWFS_ERROR("image size not multiple of blocksize");
 		return -2;
 	}
 
 	ctx->cfg.prog_size = blocksize;
 	ctx->cfg.block_size = blocksize;
 	ctx->cfg.cache_size = blocksize;
+	//ctx->cfg.subblock_size = blocksize;
 
 	return 0;
 }
